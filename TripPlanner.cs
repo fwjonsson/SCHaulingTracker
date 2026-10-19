@@ -1,43 +1,34 @@
 namespace HaulingTracker;
 
-/// <summary>One suggested trip: the stops in flying order, with the batches taken at each.</summary>
+/// <summary>One suggested trip of one worker: the stops in flying order, with the batches taken at each.</summary>
 public sealed class PlannedTrip
 {
+    public string Worker = "";
     public List<(string Id, int Batches)> Stops = new();
     public int Batches => Stops.Sum(s => s.Batches);
     public double Distance;   // Gm: Ruin, the stops in order, back to Ruin
 }
 
 /// <summary>
-/// Plans how to pick up every open batch with a ship that holds a limited number of batches, flying as little as possible.
-/// A location can be split over several trips (take what fits, come back for the rest, or fill the last seats with a small
-/// pickup nearby). Every trip starts and ends at Ruin Station.
+/// Divides the open batches over the whole crew. Everyone has a ship that holds a number of batches; every trip starts and ends
+/// at Ruin Station. A location can be split over several trips and several workers (take what fits, fill the last seats with
+/// a small pickup that is close by). The plan aims for the crew to finish at about the same time (the longest worker total is
+/// the main number) while flying as little as possible in total.
 /// </summary>
 public static class TripPlanner
 {
-    const int Restarts = 40;
-
-    /// <summary>The Gm needed if every location was flown to on its own (full trips only, the rest in one more trip).</summary>
-    public static double SeparateTrips(IReadOnlyDictionary<string, int> remaining, int capacity)
-    {
-        double sum = 0;
-        foreach (var kv in remaining)
-        {
-            if (kv.Value <= 0 || capacity < 1) continue;
-            var flights = (kv.Value + capacity - 1) / capacity;
-            sum += flights * 2 * PyroDistances.Between(PyroDistances.Ruin, kv.Key);
-        }
-        return sum;
-    }
+    const int Restarts = 30;
+    const double TotalWeight = 0.25;   // how much the combined Gm counts next to the longest worker total
 
     /// <param name="remaining">station id (see PyroDistances) to the batches still to pick up there</param>
-    /// <param name="capacity">how many batches the ship holds</param>
-    public static List<PlannedTrip> Plan(IReadOnlyDictionary<string, int> remaining, int capacity)
+    /// <param name="crew">every worker with the batches his ship holds (0 = not flying)</param>
+    public static List<PlannedTrip> Plan(IReadOnlyDictionary<string, int> remaining, IReadOnlyList<(string Name, int Capacity)> crew)
     {
+        var workers = crew.Where(c => c.Capacity > 0).ToList();
         var ids = remaining.Where(kv => kv.Value > 0).Select(kv => kv.Key).OrderBy(k => k, StringComparer.Ordinal).ToList();
         var n = ids.Count;
         var trips = new List<PlannedTrip>();
-        if (n == 0 || capacity < 1) return trips;
+        if (n == 0 || workers.Count == 0) return trips;
 
         var need = ids.Select(id => remaining[id]).ToArray();
         var total = need.Sum();
@@ -117,46 +108,71 @@ public static class TripPlanner
             return result;
         }
 
-        // the Gm of a whole plan: assign[trip][location] = batches of that location in that trip
-        double PlanCost(int[][] assign)
+        int MaskOf(int[] row)
         {
-            double sum = 0;
-            foreach (var row in assign)
+            var mask = 0;
+            for (var i = 0; i < n; i++)
             {
-                var mask = 0;
-                for (var i = 0; i < n; i++)
-                {
-                    if (row[i] > 0) mask |= 1 << i;
-                }
-                if (mask != 0) sum += Tour(mask).Cost;
+                if (row[i] > 0) mask |= 1 << i;
             }
-            return sum;
+            return mask;
         }
 
-        // one improving move: take a batch to another trip with room, or swap two batches between trips
-        bool Improve(int[][] assign, int[] loads, ref double current)
+        double SlotCost(int[] row)
         {
-            var tripCount = assign.Length;
-            for (var a = 0; a < tripCount; a++)
+            var mask = MaskOf(row);
+            return mask == 0 ? 0 : Tour(mask).Cost;
+        }
+
+        // the number to beat: the longest worker total, plus a part of the combined Gm
+        static double Objective(double[] totals) => totals.Max() + TotalWeight * totals.Sum();
+
+        // Every worker gets a few trip slots (an unused slot costs nothing). A slot has the ship size of its worker.
+        var w = workers.Count;
+        var sumCapacity = workers.Sum(c => c.Capacity);
+        var perWorker = (total + sumCapacity - 1) / sumCapacity + 1;
+        var slots = perWorker * w;
+        var slotWorker = new int[slots];
+        var slotCapacity = new int[slots];
+        for (var t = 0; t < slots; t++)
+        {
+            slotWorker[t] = t % w;
+            slotCapacity[t] = workers[t % w].Capacity;
+        }
+
+        // one improving move: take a batch to another trip with room, or swap two batches between two trips
+        bool Improve(int[][] assign, int[] loads, double[] slotCost, double[] totals, ref double current)
+        {
+            for (var a = 0; a < slots; a++)
             {
                 for (var i = 0; i < n; i++)
                 {
                     if (assign[a][i] == 0) continue;
-                    for (var b = 0; b < tripCount; b++)
+                    for (var b = 0; b < slots; b++)
                     {
                         if (a == b) continue;
-                        if (loads[b] < capacity)
+                        if (loads[b] < slotCapacity[b])
                         {
                             assign[a][i]--;
                             assign[b][i]++;
-                            var moved = PlanCost(assign);
-                            if (moved < current - 1e-9)
+                            var newA = SlotCost(assign[a]);
+                            var newB = SlotCost(assign[b]);
+                            var dA = newA - slotCost[a];
+                            var dB = newB - slotCost[b];
+                            totals[slotWorker[a]] += dA;
+                            totals[slotWorker[b]] += dB;
+                            var value = Objective(totals);
+                            if (value < current - 1e-9)
                             {
-                                current = moved;
+                                current = value;
+                                slotCost[a] = newA;
+                                slotCost[b] = newB;
                                 loads[a]--;
                                 loads[b]++;
                                 return true;
                             }
+                            totals[slotWorker[a]] -= dA;
+                            totals[slotWorker[b]] -= dB;
                             assign[a][i]++;
                             assign[b][i]--;
                         }
@@ -167,12 +183,22 @@ public static class TripPlanner
                             assign[b][i]++;
                             assign[b][j]--;
                             assign[a][j]++;
-                            var swapped = PlanCost(assign);
-                            if (swapped < current - 1e-9)
+                            var newA = SlotCost(assign[a]);
+                            var newB = SlotCost(assign[b]);
+                            var dA = newA - slotCost[a];
+                            var dB = newB - slotCost[b];
+                            totals[slotWorker[a]] += dA;
+                            totals[slotWorker[b]] += dB;
+                            var value = Objective(totals);
+                            if (value < current - 1e-9)
                             {
-                                current = swapped;
+                                current = value;
+                                slotCost[a] = newA;
+                                slotCost[b] = newB;
                                 return true;
                             }
+                            totals[slotWorker[a]] -= dA;
+                            totals[slotWorker[b]] -= dB;
                             assign[a][i]++;
                             assign[b][i]--;
                             assign[b][j]++;
@@ -186,58 +212,60 @@ public static class TripPlanner
 
         // random starts, each improved until no move helps; the best one wins. The seed is fixed so the plan does not jump around.
         var rng = new Random(20261020);
-        var bestCost = double.MaxValue;
+        var bestValue = double.MaxValue;
         int[][]? bestPlan = null;
-        var minTrips = (total + capacity - 1) / capacity;
-        for (var tripCount = minTrips; tripCount <= minTrips + 1; tripCount++)
+        for (var restart = 0; restart < Restarts; restart++)
         {
-            for (var restart = 0; restart < Restarts; restart++)
+            var units = new List<int>();
+            for (var i = 0; i < n; i++)
             {
-                var units = new List<int>();
-                for (var i = 0; i < n; i++)
-                {
-                    for (var u = 0; u < need[i]; u++) units.Add(i);
-                }
-                for (var k = units.Count - 1; k > 0; k--)
-                {
-                    var r = rng.Next(k + 1);
-                    (units[k], units[r]) = (units[r], units[k]);
-                }
+                for (var u = 0; u < need[i]; u++) units.Add(i);
+            }
+            for (var k = units.Count - 1; k > 0; k--)
+            {
+                var r = rng.Next(k + 1);
+                (units[k], units[r]) = (units[r], units[k]);
+            }
 
-                var assign = new int[tripCount][];
-                for (var a = 0; a < tripCount; a++) assign[a] = new int[n];
-                var loads = new int[tripCount];
-                foreach (var unit in units)
-                {
-                    var a = 0;
-                    while (loads[a] >= capacity) a++;
-                    assign[a][unit]++;
-                    loads[a]++;
-                }
+            var assign = new int[slots][];
+            for (var t = 0; t < slots; t++) assign[t] = new int[n];
+            var loads = new int[slots];
+            var slot = 0;
+            foreach (var unit in units)
+            {
+                while (loads[slot] >= slotCapacity[slot]) slot++;
+                assign[slot][unit]++;
+                loads[slot]++;
+            }
 
-                var current = PlanCost(assign);
-                while (Improve(assign, loads, ref current)) { }
-                if (current < bestCost - 1e-9)
-                {
-                    bestCost = current;
-                    bestPlan = assign.Select(row => (int[])row.Clone()).ToArray();
-                }
+            var slotCost = assign.Select(SlotCost).ToArray();
+            var totals = new double[w];
+            for (var t = 0; t < slots; t++) totals[slotWorker[t]] += slotCost[t];
+            var current = Objective(totals);
+            while (Improve(assign, loads, slotCost, totals, ref current)) { }
+            if (current < bestValue - 1e-9)
+            {
+                bestValue = current;
+                bestPlan = assign.Select(row => (int[])row.Clone()).ToArray();
             }
         }
 
-        foreach (var row in bestPlan!)
+        for (var t = 0; t < slots; t++)
         {
-            var mask = 0;
-            for (var i = 0; i < n; i++)
-            {
-                if (row[i] > 0) mask |= 1 << i;
-            }
+            var row = bestPlan![t];
+            var mask = MaskOf(row);
             if (mask == 0) continue;
             var tour = Tour(mask);
-            var trip = new PlannedTrip { Distance = tour.Cost };
+            var trip = new PlannedTrip { Worker = workers[slotWorker[t]].Name, Distance = tour.Cost };
             foreach (var idx in tour.Order) trip.Stops.Add((ids[idx], row[idx]));
             trips.Add(trip);
         }
-        return trips.OrderByDescending(t => t.Batches).ThenBy(t => t.Distance).ToList();
+
+        var order2 = workers.Select(c => c.Name).ToList();
+        return trips
+            .OrderBy(tp => order2.IndexOf(tp.Worker))
+            .ThenByDescending(tp => tp.Batches)
+            .ThenBy(tp => tp.Distance)
+            .ToList();
     }
 }

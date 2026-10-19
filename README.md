@@ -75,9 +75,11 @@ The program starts watching the logs by itself when it opens, and reads the back
 
 ## Trip Planner
 
-The **Trip Planner** tab suggests how to pick up the open batches with a ship that holds a limited number of batches, flying as little as possible. Pick who you plan for (**Everyone**, or a worker: then it uses the locations assigned to him and the ones nobody is assigned to) and how many batches the ship holds (saved per worker, so the C2 can be 3 and a smaller ship 2). Press **Plan Trips**, or just watch it update while you pick up cargo.
-- Every trip starts and ends at Ruin Station. A location can be split over several trips: take what fits, and fill the last seats with a small pickup that is close by, or come back for the rest. The planner tries many ways of dividing the batches and keeps the one with the fewest Gm in total, so the suggestion is always the same for the same situation.
-- **Batches** is what the trip carries out of the ship's size (green = full ship). **Gm / Batch** shows how efficient the trip is. The line above the table compares the plan with flying to every location on its own.
+The **Trip Planner** tab divides the open batches over the whole crew, so everybody flies as little as possible and you finish at about the same time.
+- The crew is the active party (**Options → Party**). In the table at the top type how many batches each member's ship holds (saved per worker; 0 = not flying this time). Press **Plan Trips**, or just watch it update while you pick up cargo.
+- It assigns trips to everyone, whoever is assigned to a location in the pickup table now. Every trip starts and ends at Ruin Station. A location can be split over several trips and several workers: take what fits and fill the last seats with a small pickup that is close by, or come back for the rest.
+- The plan is the one where the longest worker total is as short as possible, with a smaller weight on the combined Gm. It tries many ways of dividing the batches, and the suggestion is always the same for the same situation.
+- **Batches** is what the trip carries out of the ship's size (green = full ship). **Gm / Batch** shows how efficient a trip is. Each worker has a total row with his trips, batches and Gm.
 - It uses the Pyro distance table, so a location that is not in it is left out and named under the summary. Only batches that are not picked up yet are planned.
 
 ## Leaderboards

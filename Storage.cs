@@ -86,7 +86,7 @@ public sealed class AppData
     public List<string> InactiveParty { get; set; } = new();   // party members that are not shown in the party list of the Session tab
     public bool DarkMode { get; set; }   // the dark look
     public string? Channel { get; set; }   // Auto, LIVE, HOTFIX...
-    public Dictionary<string, int> ShipCapacity { get; set; } = new();   // worker -> batches his ship holds (the Trip Planner), "*" = everyone
+    public Dictionary<string, int> ShipCapacity { get; set; } = new();   // worker -> batches his ship holds (the Trip Planner), 0 = not flying
     public List<string> WatchPaths { get; set; } = new();   // Game.log files to watch live, also on other computers
     public List<string> DisabledWatchPaths { get; set; } = new();   // sources that are saved but switched off (unticked in Sources)
     public Dictionary<string, string> LocationNames { get; set; } = new();   // location id -> your name
