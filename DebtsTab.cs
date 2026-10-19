@@ -202,30 +202,40 @@ public sealed partial class MainForm
     static decimal CarriedBy(Dictionary<string, decimal> carried, string name) =>
         carried.Where(kv => SameName(kv.Key, name)).Sum(kv => kv.Value);
 
-    /// <summary>What every worker carried: the value of the pickups of his finished runs (nothing counts until the run is done).</summary>
+    /// <summary>Every pickup stop of a completed mission with the worker who did it and its value (reward / stops).</summary>
+    List<(string Worker, decimal Value)> CompletedStops(SessionGroup g, SessionInputs inp)
+    {
+        var result = new List<(string, decimal)>();
+        if (_log == null) return result;
+        var r2 = inp.Reward2 == 0 ? DefaultReward2 : inp.Reward2;
+        var r3 = inp.Reward3 == 0 ? DefaultReward3 : inp.Reward3;
+        foreach (var m in g.Missions)
+        {
+            if (!m.Completed || !m.EndedAt.HasValue) continue;
+            var reward = m.Multi == 2 ? r2 : m.Multi == 3 ? r3 : 0m;
+            if (reward <= 0) continue;
+            foreach (var kv in m.ObjZone)
+            {
+                if (!kv.Key.StartsWith("pickup_") || !System.Text.RegularExpressions.Regex.IsMatch(kv.Key, @"_\d+$")) continue;
+                if (!m.Events.TryGetValue(kv.Key, out var ev) || ev.Count == 0) continue;
+                string? who = null;
+                if (inp.Rows.TryGetValue(kv.Value, out var ri) && !string.IsNullOrWhiteSpace(ri.Worker)) who = ri.Worker.Trim();
+                else who = WorkerTripBuilder.ActorAt(_log, true, ev.Min(e => e.Time));
+                if (who == null) continue;
+                result.Add((who, reward / m.Multi));
+            }
+        }
+        return result;
+    }
+
+    /// <summary>What every worker carried: the value of the stops of completed missions. This is the real income that the debts and the all-time board use.</summary>
     Dictionary<string, decimal> ComputeCarried(SessionGroup g, SessionInputs inp)
     {
         var carried = new Dictionary<string, decimal>(StringComparer.OrdinalIgnoreCase);
-        if (_log == null) return carried;
-        var r2 = inp.Reward2 == 0 ? DefaultReward2 : inp.Reward2;
-        var r3 = inp.Reward3 == 0 ? DefaultReward3 : inp.Reward3;
-        var rows = SessionBuilder.Locations(g);
-        var trips = WorkerTripBuilder.Build(g,
-            z => inp.Rows.TryGetValue(z, out var r) && !string.IsNullOrWhiteSpace(r.Worker) ? r.Worker.Trim() : "Unassigned",
-            _log, inp.ManualEnds);
-        foreach (var t in trips)
+        foreach (var (who, value) in CompletedStops(g, inp))
         {
-            if (!t.End.HasValue || t.Manual || t.Worker == "Unassigned") continue;
-            foreach (var p in t.Pickups)
-            {
-                var loc = rows.FirstOrDefault(x => x.Zone == p.Zone);
-                if (loc == null || loc.Missions <= 0) continue;
-                var zoneValue = loc.Stops2 * r2 / 2m + loc.Stops3 * r3 / 3m;
-                var value = zoneValue * Math.Min(p.Missions, loc.Missions) / loc.Missions;
-                if (value <= 0) continue;
-                carried.TryGetValue(t.Worker, out var old);
-                carried[t.Worker] = old + value;
-            }
+            carried.TryGetValue(who, out var old);
+            carried[who] = old + value;
         }
         return carried;
     }
@@ -279,6 +289,14 @@ public sealed partial class MainForm
                 z => inp.Rows.TryGetValue(z, out var r) && !string.IsNullOrWhiteSpace(r.Worker) ? r.Worker : "Unassigned",
                 _log, inp.ManualEnds);
             var stats = ComputeStats(trips, inp);
+            // batches delivered for the all-time board come from completed missions
+            foreach (var w in stats.Values) w.Missions = 0;
+            foreach (var (who, _) in CompletedStops(g, inp))
+            {
+                var key = stats.Keys.FirstOrDefault(k => SameName(k, who)) ?? who;
+                if (!stats.TryGetValue(key, out var ws)) stats[key] = ws = new WorkerStat();
+                ws.Missions++;
+            }
 
             var same = SameStats(inp.Stats, stats)
                 && inp.Carried.Count == carried.Count

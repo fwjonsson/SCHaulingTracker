@@ -1426,7 +1426,14 @@ public sealed partial class MainForm : Form
     }
 
     /// <summary>What the finished runs are worth: every pickup of a run counts its share of the value of that location.</summary>
-    decimal FinishedRunsValue() => _trips.Where(t => t.End.HasValue && !t.Manual).Sum(RunValue);
+    decimal CompletedRevenue()
+    {
+        if (_inputs == null || _current == null) return 0;
+        var r2 = _inputs.Reward2 == 0 ? DefaultReward2 : _inputs.Reward2;
+        var r3 = _inputs.Reward3 == 0 ? DefaultReward3 : _inputs.Reward3;
+        return _current.Missions.Where(m => m.Completed && m.EndedAt.HasValue)
+            .Sum(m => m.Multi == 2 ? r2 : m.Multi == 3 ? r3 : 0m);
+    }
 
     /// <summary>The value of the locations a run picked up at, combined.</summary>
     decimal RunValue(WorkerTrip t)
@@ -1462,12 +1469,12 @@ public sealed partial class MainForm : Form
             ? (int)duration.Value.TotalHours + ":" + duration.Value.Minutes.ToString("00")
             : "";
 
-        // revenue = value of the finished runs, taken from the values of the pickup locations of those runs
-        var runRevenue = FinishedRunsValue();
-        _revenueVal.Text = _inputs == null || runRevenue == 0 ? "" : runRevenue.ToString("N0");
+        // revenue = the real income: the rewards of the missions that are completed
+        var income = CompletedRevenue();
+        _revenueVal.Text = _inputs == null || income == 0 ? "" : income.ToString("N0");
 
-        _hourlyVal.Text = duration.HasValue && duration.Value.TotalHours > 0 && runRevenue > 0
-            ? (runRevenue / (decimal)duration.Value.TotalHours).ToString("N0")
+        _hourlyVal.Text = duration.HasValue && duration.Value.TotalHours > 0 && income > 0
+            ? (income / (decimal)duration.Value.TotalHours).ToString("N0")
             : "";
 
         FillStats();

@@ -76,7 +76,7 @@ The **Dark Mode** button in the toolbar switches between the light and the dark 
 The **Session Leaderboard** has one row per worker who started a cargo run in the session, and a total row, the highest earner on top (marked with a star on each side of the name and a gold row; the other names are indented to line up):
 - **Avg Batches/Run** and **Avg Run Time**: averages over the completed runs (ended by a hand-in, not ended by hand). Batches/run counts the batches picked up at each location, like the Batches column of the run board.
 - **Completed Runs** and **Perfect Runs** (completed runs with lost cargo None).
-- **Batches Delivered**: the batches of the worker's finished runs. Nothing counts (also not the earned aUEC) until the run is done.
+- **Batches Delivered**: the batches of the worker's finished runs. **Total Run Value** and **Run Value/Hour** are the values of the pickup locations of the finished runs. The real income is the **Total Revenue** (completed missions) in the time table. The History tab counts completed missions only.
 - **Earned aUEC**: the value of the locations assigned to him this session. **Share of value** is his part of the value carried by everyone this session. **aUEC/hour** is that divided by the session duration (Start Time to End Time).
 
 The **History** tab has the same table for **all saved sessions** (with an extra Sessions column). Under it a line shows the best session (most revenue) and the best aUEC/hour. It adds up what each session saved, so it keeps working after the logs are gone. Sessions saved by an older version have earnings but no run counts until their logs are opened once.

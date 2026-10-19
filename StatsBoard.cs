@@ -32,9 +32,9 @@ public sealed partial class MainForm
         grid.Columns.Add(Col("Batches Delivered", 130, true));
         grid.Columns.Add(Col("Avg Batches/Run", 130, true));
         grid.Columns.Add(Col("Avg Run Time", 100, true));
-        grid.Columns.Add(Col("Earned aUEC", 120, true, DataGridViewContentAlignment.MiddleRight));
+        grid.Columns.Add(Col(withSessions ? "Earned aUEC" : "Total Run Value", 120, true, DataGridViewContentAlignment.MiddleRight));
         grid.Columns.Add(Col("Share of Value", 110, true));
-        grid.Columns.Add(Col("aUEC/Hour", 120, true, DataGridViewContentAlignment.MiddleRight, true));
+        grid.Columns.Add(Col(withSessions ? "aUEC/Hour" : "Run Value/Hour", 120, true, DataGridViewContentAlignment.MiddleRight, true));
     }
 
     void BuildStatsGrid() => BuildStatColumns(_statsGrid, false);
@@ -124,7 +124,13 @@ public sealed partial class MainForm
         _statsGrid.Rows.Clear();
         if (_inputs == null || _current == null) return;
 
-        var carried = ComputeCarried(_current, _inputs);
+        // the value of the finished runs per worker (the real income is the Total Revenue above)
+        var carried = new Dictionary<string, decimal>(StringComparer.OrdinalIgnoreCase);
+        foreach (var t in _trips.Where(t => t.End.HasValue && !t.Manual && t.Worker != "Unassigned"))
+        {
+            carried.TryGetValue(t.Worker, out var old);
+            carried[t.Worker] = old + RunValue(t);
+        }
 
         double seconds = 0;
         if (TryTime(_startBox.Text, out var s) && TryTime(_endBox.Text, out var e))
