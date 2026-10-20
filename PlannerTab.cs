@@ -45,6 +45,8 @@ public sealed partial class MainForm
         public PlannedTrip? Trip;
         public bool Locked;              // a planned trip that is locked to its worker (his Current)
         public bool First;               // the trip the worker is flying right now (his run in progress, or his first planned trip when he has none): the whole row has his colour
+        public bool Hidden;              // a planned trip that is shown inside the Current row (the continuation of the run in progress), not as a row of its own
+        public bool Estimate;            // the time is an estimate (~) although this is a run
         public bool Solid;               // a planned trip that is flown first (solid line on the map); the later ones are dotted
         public string? From;             // a trip that continues a run in progress starts at this station
         public bool IsPlan => Level == "plan";
@@ -289,8 +291,10 @@ public sealed partial class MainForm
     List<string> ActiveCrew() => _data.Party.Where(n => !_data.InactiveParty.Any(x => SameName(x, n))).ToList();
 
     static string RouteText(PlannedTrip trip) =>
-        (trip.From != null ? "From " + PyroDistances.NameOf(trip.From) + "  →  " : "")
-        + string.Join("  →  ", trip.Stops.Select((s, i) => PyroDistances.NameOf(s.Id) + " ×" + s.Batches + (i == 0 && trip.Locked ? " (locked)" : "")));   // the locked stop says so
+        (trip.From != null ? "From " + PyroDistances.NameOf(trip.From) + "  →  " : "") + StopsText(trip);
+
+    static string StopsText(PlannedTrip trip) =>
+        string.Join("  →  ", trip.Stops.Select((s, i) => PyroDistances.NameOf(s.Id) + " ×" + s.Batches + (i == 0 && trip.Locked ? " (locked)" : "")));   // the locked stop says so
 
     static string PlanTitle(PlanWorkerView w)
     {
@@ -551,6 +555,19 @@ public sealed partial class MainForm
                     Trip = mine[k],
                 });
             }
+            // what the plan adds to the run in progress is part of his Current row: the stops already picked up, then the ones still to pick up
+            if (runRow != null && mine.Count > 0 && mine[0].Special && mine[0].Stops.Count > 0)
+            {
+                var cont = mine[0];
+                runRow.Route += "  →  " + StopsText(cont);
+                runRow.BatchCount += cont.Batches;
+                runRow.Batches = runRow.BatchCount + "/" + c.Capacity;
+                runRow.Stops = runRow.Stops.Concat(cont.Stops.Select(s => s.Id)).ToList();
+                runRow.Gm = PyroDistances.Run(runRow.Stops);
+                runRow.Seconds = cont.Seconds;   // what is left of the flight, from where he is
+                runRow.Estimate = true;
+                w.Rows.First(r => r.Trip == cont).Hidden = true;
+            }
             plan.Workers.Add(w);
         }
 
@@ -571,7 +588,7 @@ public sealed partial class MainForm
         }
 
         plan.Signature = plan.Summary + "¦" + (Theme.Dark ? "dark" : "light") + "¦" + string.Join("¦", plan.Workers.SelectMany(w =>
-            w.Rows.Select(r => w.Name + "|" + w.Capacity + "|" + r.Label + "|" + r.Locked + "|" + r.First + "|" + r.Solid + "|" + r.Route + "|" + r.Batches + "|" + r.Level + "|" + r.Gm.ToString("F1", CultureInfo.InvariantCulture) + "|" + r.Seconds.ToString("F0", CultureInfo.InvariantCulture) + "|" + w.Drive)));
+            w.Rows.Select(r => w.Name + "|" + w.Capacity + "|" + r.Label + "|" + r.Hidden + "|" + r.Locked + "|" + r.First + "|" + r.Solid + "|" + r.Route + "|" + r.Batches + "|" + r.Level + "|" + r.Gm.ToString("F1", CultureInfo.InvariantCulture) + "|" + r.Seconds.ToString("F0", CultureInfo.InvariantCulture) + "|" + w.Drive)));
         return plan;
     }
 
@@ -703,7 +720,7 @@ public sealed partial class MainForm
             grid.Columns.Add(Col("Gm / Batch", 100, true, DataGridViewContentAlignment.MiddleRight));
             FitColumns(grid);   // the columns share the width, so nothing is cut off or has to scroll sideways
             var boldFont = new Font("Segoe UI", 10f, FontStyle.Bold);
-            foreach (var r in w.Rows)
+            foreach (var r in w.Rows.Where(x => !x.Hidden))
             {
                 var idx = grid.Rows.Add(
                     RowLabel(r),
@@ -743,7 +760,7 @@ public sealed partial class MainForm
                     if (grid.CurrentRow?.Tag is PlanRow picked && picked.IsPlan) onSelect(picked);
                 };
             }
-            grid.Height = grid.ColumnHeadersHeight + w.Rows.Count * grid.RowTemplate.Height + 3;
+            grid.Height = grid.ColumnHeadersHeight + w.Rows.Count(x => !x.Hidden) * grid.RowTemplate.Height + 3;
             height += grid.Height;
             block.Controls.Add(grid);   // added first, so the title sits above it
         }
@@ -769,5 +786,5 @@ public sealed partial class MainForm
     }
 
     /// <summary>A run: the time it really took. A planned trip: the estimated flight time, with a ~ in front.</summary>
-    static string TimeText(PlanRow r) => r.Seconds <= 0 ? "" : (r.IsPlan ? "~" : "") + FlightSpan(r.Seconds);
+    static string TimeText(PlanRow r) => r.Seconds <= 0 ? "" : (r.IsPlan || r.Estimate ? "~" : "") + FlightSpan(r.Seconds);
 }

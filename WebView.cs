@@ -704,7 +704,7 @@ public sealed partial class MainForm
             return new
             {
                 headers,
-                rows = w.Rows.Select(r =>
+                rows = w.Rows.Where(r => !r.Hidden).Select(r =>
                 {
                     var back = RowColor(r) is { } c ? WebColor(c) : cell;
                     var backs = new[] { back, back, back, back, back, back };
