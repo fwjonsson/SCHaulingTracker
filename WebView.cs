@@ -197,7 +197,6 @@ sealed class LiveWebServer : IDisposable
   .nav button, .sub button { background:var(--cell); color:var(--fg); border:1px solid var(--line); padding:6px 16px; font:inherit; font-weight:600; cursor:pointer; border-radius:4px; }
   .nav button.on, .sub button.on { background:var(--header); color:#fff; }
   .hidden { display:none; }
-  #planSummary { font-weight:600; margin:8px 0 2px; }
   .plantables { flex:1 1 520px; min-width:0; }
   .plantables h2:first-child { margin-top:0; }
   .plantables table { table-layout:fixed; }
@@ -228,7 +227,7 @@ sealed class LiveWebServer : IDisposable
 </div>
 
 <div id="viewP" class="hidden">
-  <div id="planSummary"></div><div id="planNote" class="empty"></div>
+  <div id="planNote" class="empty"></div>
   <div id="planBody"></div>
 </div>
 
@@ -386,7 +385,6 @@ function mapSvg(el, stations, routes, bg) {
 
 function renderPlanner() {
   const p = last.planner;
-  document.getElementById('planSummary').textContent = p.summary || '';
   document.getElementById('planNote').textContent = p.note || '';
   const body = document.getElementById('planBody');
   body.textContent = '';

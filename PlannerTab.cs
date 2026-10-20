@@ -82,65 +82,44 @@ public sealed partial class MainForm
         public string Note = "";
     }
 
-    readonly Button _planBtn = new();
-    readonly Button _resetTripsBtn = new();
-    readonly Label _planSummary = new();
+    // the two buttons sit in the top bar of the window, level with Options and Stop Session, while the Trip Planner tab is shown
+    readonly ToolStripButton _planBtn = new() { DisplayStyle = ToolStripItemDisplayStyle.Text, Text = "Plan Trips", Padding = new Padding(8, 0, 8, 0), Visible = false };
+    readonly ToolStripButton _resetTripsBtn = new() { DisplayStyle = ToolStripItemDisplayStyle.Text, Text = "Reset Trips", Padding = new Padding(8, 0, 8, 0), Visible = false };
     readonly Label _planNote = new();
     readonly Panel _planBody = new();              // the page: the map and the tables (rebuilt when the plan changes)
-    readonly ToolTip _planTip = new() { AutoPopDelay = 60000, InitialDelay = 250, ReshowDelay = 100 };
     string _planShown = "";                        // what the pages show now, so they are only rebuilt when it changes
     PlanCore? _planCore;
 
     Control BuildPlannerPage()
     {
-        var t = new TableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 1, RowCount = 6, Padding = new Padding(12) };
+        var t = new TableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 1, RowCount = 4, Padding = new Padding(12) };
         t.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
-        t.RowStyles.Add(new RowStyle(SizeType.Absolute, 38));    // title and the buttons
-        t.RowStyles.Add(new RowStyle(SizeType.Absolute, 26));    // summary
         t.RowStyles.Add(new RowStyle(SizeType.AutoSize));        // a warning, only when there is one
         t.RowStyles.Add(new RowStyle(SizeType.Percent, 62));     // the map and the tables
         t.RowStyles.Add(new RowStyle(SizeType.Absolute, TitleHeight));   // Cargo Runs
         t.RowStyles.Add(new RowStyle(SizeType.Percent, 38));     // the copy of Cargo Runs
 
-        // the title on the left (hold the mouse over it for the explanation), Plan Trips and Reset Trips on the right
-        var head = new Panel { Dock = DockStyle.Fill, Margin = new Padding(0) };
-        var caption = Caption("Trip Planner");
-        const string info = "Divides the open batches over the crew, so everybody flies as little as possible and you finish together.\n\n"
+        // Plan Trips and Reset Trips are in the top bar of the window (AddSessionControlsToMenu); hold the mouse over them for the explanation
+        _planBtn.ToolTipText = "Divides the open batches over the crew, so everybody flies as little as possible and you finish together.\n\n"
             + "Who flies, how many batches each ship holds and which quantum drive each has is set in the Party table on the front page. The runs below get their worker from the logs, and from these trips for members without a log.\n\n"
             + "Flight time is the estimated flying time of that whole route with the drive of the worker (~, no loading); Time is how long a run really took. Green = done, orange = some cargo lost, red = all lost. The run you are flying is your Current row, in your colour.\n\n"
             + "Plan Trips locks the next stop of everybody: planning again (for example when someone joins) leaves those alone and plans the rest around them, and a run in progress counts in the ship. Reset Trips takes the locks away. Both ask first.";
-        foreach (Control c in new[] { caption }.Concat(caption.Controls.Cast<Control>())) _planTip.SetToolTip(c, info);
-        StyleButton(_planBtn, "Plan Trips");
-        _planBtn.Margin = new Padding(0, 3, 0, 3);
-        _planBtn.Click += (_, _) => PlanTrips();
-        StyleButton(_resetTripsBtn, "Reset Trips");
-        _resetTripsBtn.Margin = new Padding(8, 3, 0, 3);
-        _resetTripsBtn.Click += (_, _) => ResetTrips();
-        var bar = new FlowLayoutPanel { Dock = DockStyle.Right, AutoSize = true, WrapContents = false, FlowDirection = FlowDirection.LeftToRight, Margin = new Padding(0) };
-        bar.Controls.Add(_planBtn);
-        bar.Controls.Add(_resetTripsBtn);
-        head.Controls.Add(caption);   // docked last: it fills what the buttons leave
-        head.Controls.Add(bar);
-        t.Controls.Add(head, 0, 0);
+        _resetTripsBtn.ToolTipText = "Takes the locked stops away, so the trips can be planned from scratch. Asks first.";
 
-        _planSummary.Dock = DockStyle.Fill;
-        _planSummary.TextAlign = ContentAlignment.MiddleLeft;
-        _planSummary.Font = new Font("Segoe UI", 10f, FontStyle.Bold);
-        t.Controls.Add(_planSummary, 0, 1);
         _planNote.Dock = DockStyle.Fill;
         _planNote.AutoSize = true;
         _planNote.TextAlign = ContentAlignment.MiddleLeft;
         _planNote.ForeColor = Color.DimGray;
         _planNote.Tag = "muted";
         _planNote.Visible = false;
-        t.Controls.Add(_planNote, 0, 2);
+        t.Controls.Add(_planNote, 0, 0);
 
         _planBody.Dock = DockStyle.Fill;
         _planBody.Margin = new Padding(0);
-        t.Controls.Add(_planBody, 0, 3);
-        t.Controls.Add(SectionTitle("Cargo Runs"), 0, 4);
+        t.Controls.Add(_planBody, 0, 1);
+        t.Controls.Add(SectionTitle("Cargo Runs"), 0, 2);
         BuildPlanRunsGrid();
-        t.Controls.Add(_planRunsGrid, 0, 5);
+        t.Controls.Add(_planRunsGrid, 0, 3);
         return t;
     }
 
@@ -664,7 +643,6 @@ public sealed partial class MainForm
     void RefreshPlanner()
     {
         var plan = GetPlan();
-        _planSummary.Text = plan.Summary;
         _planNote.Text = plan.Note;
         _planNote.Visible = plan.Note.Length > 0;
         if (plan.Signature == _planShown) return;   // nothing changed, so nothing flickers

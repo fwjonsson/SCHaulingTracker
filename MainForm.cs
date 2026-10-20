@@ -143,6 +143,7 @@ public sealed partial class MainForm : Form
         plannerPage.Controls.Add(BuildPlannerPage());
         tabs.SelectedIndexChanged += (_, _) =>
         {
+            _planBtn.Visible = _resetTripsBtn.Visible = tabs.SelectedTab == plannerPage;
             if (tabs.SelectedTab == plannerPage) RefreshPlanner();
             else if (tabs.SelectedTab != sessionPage) RefreshDebts();
         };
@@ -352,6 +353,16 @@ public sealed partial class MainForm : Form
         _sessionToggleBtn.Margin = new Padding(6, 1, 6, 1);
         _menu.Items.Add(_sessionToggleBtn);
         _menu.Items.Add(new ToolStripControlHost(_sessionBox) { Alignment = ToolStripItemAlignment.Right, Margin = new Padding(0, 0, 0, 0) });
+
+        // the Trip Planner buttons, left of the session picker (Plan Trips left of Reset Trips), only while that tab is shown
+        _menu.ShowItemToolTips = true;
+        _planBtn.Alignment = _resetTripsBtn.Alignment = ToolStripItemAlignment.Right;
+        _planBtn.Margin = new Padding(6, 1, 0, 1);
+        _resetTripsBtn.Margin = new Padding(6, 1, 6, 1);
+        _planBtn.Click += (_, _) => PlanTrips();
+        _resetTripsBtn.Click += (_, _) => ResetTrips();
+        _menu.Items.Add(_resetTripsBtn);
+        _menu.Items.Add(_planBtn);
     }
 
     readonly MenuStrip _menu = new();
