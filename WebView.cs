@@ -181,6 +181,7 @@ sealed class LiveWebServer : IDisposable
   <div>
     <h2>Contracts</h2><div class="scroll" id="rewards"></div>
     <h2>Session</h2><div class="scroll" id="summary"></div>
+    <h2>Party</h2><div class="scroll" id="party"></div>
   </div>
 </div>
 <h2>Session leaderboard</h2><div class="scroll" id="leaders"></div>
@@ -397,6 +398,7 @@ async function refresh() {
     table(document.getElementById('finished'), d.finished);
     table(document.getElementById('rewards'), d.rewards);
     summary(document.getElementById('summary'), d.summary || []);
+    table(document.getElementById('party'), d.party);
     table(document.getElementById('leaders'), d.leaders);
     table(document.getElementById('runs'), d.runs);
     if (d.planner) renderPlanner();
@@ -530,6 +532,18 @@ public sealed partial class MainForm
                 new { k = "aUEC/Hour", v = _hourlyVal.Text },
             },
             rewards = WebGrid(_rewards),
+            party = WebSimple(new[] { ("Member", "left"), ("Active", "center"), ("Batches", "center"), ("Since", "center") },
+                _data.Party.Select(n =>
+                {
+                    var last = _data.PartyChanges.Where(c => SameName(c.Name, n)).OrderBy(c => c.TimeUtc).LastOrDefault();
+                    return new[]
+                    {
+                        n,
+                        IsActiveAt(n, DateTime.UtcNow) ? "Yes" : "No",
+                        Math.Max(1, ShipCapacityOf(n)).ToString(System.Globalization.CultureInfo.InvariantCulture),
+                        last == null ? "" : last.TimeUtc.ToLocalTime().ToString("d MMM HH:mm", System.Globalization.CultureInfo.CurrentCulture),
+                    };
+                })),
             pickups = WebGrid(_logGrid),
             finished = WebGrid(_doneGrid),
             leaders = WebGrid(_statsGrid),

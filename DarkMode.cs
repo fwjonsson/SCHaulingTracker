@@ -22,6 +22,7 @@ public sealed partial class MainForm
         _renderedVersion = -1;
         if (_log != null) RefreshFromLog();
         RefreshDebts();
+        RefreshPartyPanel();
         if (_planTabs.Visible && _planTabs.IsHandleCreated) RefreshPlanner();
         FitTopArea();
         Invalidate(true);

@@ -113,7 +113,7 @@ public sealed partial class MainForm
 
         t.Controls.Add(new Label
         {
-            Text = "Mission rewards are split equally between the party of each session, but everybody is owed the value he carried. Use Session Party… if someone was in the party without carrying. Ticked payments reduce the debts.",
+            Text = "Every mission payout is split equally between the party members who were active when it paid out (see the Party table on the front page), but everybody is owed the value he carried. Ticked payments reduce the debts. Session Party… sets one fixed party for a whole session instead.",
             Dock = DockStyle.Fill,
             ForeColor = Color.DimGray,
             Tag = "muted",
@@ -257,6 +257,75 @@ public sealed partial class MainForm
         return carried;
     }
 
+    /// <summary>
+    /// What every worker carried (the batches of completed missions in finished runs) and what every worker received:
+    /// the payout of each completed mission is split equally between the party members who were active at the moment it
+    /// paid out. Someone who joined after a mission paid out, or left before it, gets no share of it.
+    /// Missions that paid out before the party table started to track times (or in a session with a typed Session Party) use the whole session party.
+    /// </summary>
+    (Dictionary<string, decimal> Carried, Dictionary<string, decimal> Received) ComputePayouts(SessionGroup g, SessionInputs inp)
+    {
+        var carried = new Dictionary<string, decimal>(StringComparer.OrdinalIgnoreCase);
+        var received = new Dictionary<string, decimal>(StringComparer.OrdinalIgnoreCase);
+        if (_log == null) return (carried, received);
+
+        var trips = WorkerTripBuilder.Build(g,
+            (z, t) => WorkerTripBuilder.WorkerAt(inp, z, t),
+            _log, inp.ManualEnds);
+        var byMission = new Dictionary<string, Dictionary<string, decimal>>();
+        foreach (var t in trips)
+        {
+            if (!t.End.HasValue || t.Worker == "Unassigned" || t.Manual || LostLevelOf(inp, t.Key) == "All") continue;
+            foreach (var p in t.Pickups)
+            {
+                foreach (var id in p.MissionIds)
+                {
+                    var m = g.Missions.FirstOrDefault(x => x.Id == id);
+                    if (m == null || m.Multi == 0 || !m.Completed) continue;
+                    var v = RewardOf(m, inp) / m.Multi;
+                    if (v <= 0) continue;
+                    carried.TryGetValue(t.Worker, out var old);
+                    carried[t.Worker] = old + v;
+                    if (!byMission.TryGetValue(id, out var by)) byMission[id] = by = new Dictionary<string, decimal>(StringComparer.OrdinalIgnoreCase);
+                    by.TryGetValue(t.Worker, out var oldBy);
+                    by[t.Worker] = oldBy + v;
+                }
+            }
+        }
+
+        var sessionMembers = new List<string>(inp.Party ?? new List<string>());
+        foreach (var k in carried.Keys)
+        {
+            if (!sessionMembers.Any(x => SameName(x, k))) sessionMembers.Add(k);
+        }
+        var since = PartyTrackingStart();
+        foreach (var kv in byMission)
+        {
+            var m = g.Missions.First(x => x.Id == kv.Key);
+            var pool = kv.Value.Values.Sum();
+            List<string> members;
+            if (inp.Party != null || !m.EndedAt.HasValue || m.EndedAt.Value < since)
+            {
+                members = sessionMembers;
+            }
+            else
+            {
+                members = PartyAt(m.EndedAt.Value);
+                if (members.Count == 0) members = kv.Value.Keys.ToList();   // nobody was marked active: the ones who carried it share it
+            }
+            var share = pool / members.Count;
+            foreach (var name in members)
+            {
+                received.TryGetValue(name, out var old);
+                received[name] = old + share;
+            }
+        }
+        return (carried, received);
+    }
+
+    static bool SameMap(Dictionary<string, decimal> a, Dictionary<string, decimal> b) =>
+        a.Count == b.Count && b.All(kv => a.TryGetValue(kv.Key, out var v) && v == kv.Value);
+
     /// <summary>Keeps what every session earned per worker, and the money transfers, so they survive closing the program.</summary>
     void UpdateSnapshots()
     {
@@ -267,7 +336,7 @@ public sealed partial class MainForm
         {
             _data.Sessions.TryGetValue(g.Key, out var stored);
             if (stored != null && WorkerTripBuilder.ResetWorkersForNewBatch(g, stored)) changed = true;
-            var carried = ComputeCarried(g, stored ?? new SessionInputs(), CarryMode.Confirmed);
+            var (carried, received) = ComputePayouts(g, stored ?? new SessionInputs());
             var runValues = ComputeCarried(g, stored ?? new SessionInputs());
             var failedValues = ComputeCarried(g, stored ?? new SessionInputs(), CarryMode.Failed);
             if (carried.Count == 0 && runValues.Count == 0) continue;
@@ -289,7 +358,7 @@ public sealed partial class MainForm
             }
 
             var members = new List<string>(inp.Party ?? new List<string>());
-            foreach (var k in carried.Keys.Concat(runValues.Keys))
+            foreach (var k in carried.Keys.Concat(runValues.Keys).Concat(received.Keys))
             {
                 if (!members.Any(x => SameName(x, k))) members.Add(k);
             }
@@ -313,6 +382,7 @@ public sealed partial class MainForm
             var stats = ComputeStats(trips, inp, StationOf);   // a perfect run stays perfect, whatever the server does later
 
             var same = SameStats(inp.Stats, stats)
+                && SameMap(inp.Received, received)
                 && inp.Carried.Count == carried.Count
                 && inp.RunValues.Count == runValues.Count
                 && inp.FailedValues.Count == failedValues.Count
@@ -324,6 +394,7 @@ public sealed partial class MainForm
             if (!same || inp.MissionIds.Count != ids.Count)
             {
                 inp.Carried = new Dictionary<string, decimal>(carried);
+                inp.Received = new Dictionary<string, decimal>(received);
                 inp.RunValues = new Dictionary<string, decimal>(runValues);
                 inp.FailedValues = new Dictionary<string, decimal>(failedValues);
                 inp.Stats = new Dictionary<string, WorkerStat>(stats);

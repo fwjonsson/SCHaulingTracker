@@ -147,9 +147,10 @@ public sealed partial class MainForm : Form
         };
 
         // top area: the pickup board and the session summary side by side, the leaderboard under both
-        var main = _main = new TableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 2, RowCount = 2, Margin = new Padding(0) };
+        var main = _main = new TableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 3, RowCount = 2, Margin = new Padding(0) };
         main.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
-        main.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 580));
+        main.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 490));   // the tables with the times and the contracts
+        main.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 290));   // the party
         main.RowStyles.Add(new RowStyle(SizeType.Absolute, 306));   // both rows are fitted to the boards by FitTopArea
         main.RowStyles.Add(new RowStyle(SizeType.Absolute, 130));
 
@@ -192,8 +193,9 @@ public sealed partial class MainForm : Form
 
         main.Controls.Add(left, 0, 0);
         main.Controls.Add(BuildHeader(), 1, 0);
+        main.Controls.Add(BuildPartyPanel(), 2, 0);
         main.Controls.Add(board, 0, 1);
-        main.SetColumnSpan(board, 2);
+        main.SetColumnSpan(board, 3);
 
         // the run board with its title
         var runs = new TableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 1, RowCount = 2, Margin = new Padding(0) };
@@ -315,7 +317,7 @@ public sealed partial class MainForm : Form
         _status.Tag = "muted";
         _status.Margin = new Padding(6, 8, 0, 0);
 
-        bar.Controls.AddRange(new Control[] { _sessionBox, _startSessionBtn, _stopSessionBtn, _status });
+        bar.Controls.AddRange(new Control[] { _sessionBox, _sessionToggleBtn, _status });
         return bar;
     }
 
@@ -347,7 +349,7 @@ public sealed partial class MainForm : Form
         }
 
         _partyBtn.Text = "Party…";
-        _partyBtn.Click += (_, _) => EditParty();
+        _partyBtn.Click += (_, _) => _partyGrid.Focus();   // the party is the table at the top right of the front page
         _resetBtn.Text = "Use Log Times";
         _resetBtn.Click += (_, _) => ResetTimes();
         _copyBtn.Text = "Copy Table for Google Sheets";
@@ -1469,6 +1471,7 @@ public sealed partial class MainForm : Form
             row.Cells[2].Style.BackColor = DoneGreen;
         }
         FitTopArea();
+        RefreshPartyPanel();
 
         if (_planTabs.Visible && _planTabs.IsHandleCreated) RefreshPlanner();   // the plan follows the batches you pick up while the tab is open
     }
@@ -1535,69 +1538,6 @@ public sealed partial class MainForm : Form
             UpdateSnapshots();
             RefreshDebts();
         }
-    }
-
-    void EditParty()
-    {
-        using var f = new Form
-        {
-            Text = "Party",
-            ClientSize = new Size(500, 380),
-            StartPosition = FormStartPosition.CenterParent,
-            MinimizeBox = false,
-            MaximizeBox = false,
-            ShowInTaskbar = false,
-            Font = Font,
-        };
-        var label = new Label { Text = "Type a name in the empty row to add it. These are the choices in Assigned Worker. Untick Active to hide someone from the party list. Batch Capacity is how many batches the ship holds per trip (the Trip Planner uses it).", Dock = DockStyle.Top, Height = 64, Padding = new Padding(6, 6, 6, 0) };
-        var grid = new DataGridView();
-        StyleGrid(grid);
-        grid.Dock = DockStyle.Fill;
-        grid.AllowUserToAddRows = true;
-        grid.AllowUserToDeleteRows = true;
-        grid.Columns.Add(Col("Name", 240, false, DataGridViewContentAlignment.MiddleLeft, true));
-        grid.Columns.Add(new DataGridViewCheckBoxColumn { HeaderText = "Active", Width = 80, SortMode = DataGridViewColumnSortMode.NotSortable });
-        grid.Columns.Add(Col("Batch Capacity", 130, false, DataGridViewContentAlignment.MiddleCenter));
-        foreach (var name in _data.Party)
-            grid.Rows.Add(name, !_data.InactiveParty.Any(x => SameName(x, name)), Math.Max(1, ShipCapacityOf(name)));
-        grid.DefaultValuesNeeded += (_, e) =>
-        {
-            e.Row.Cells[1].Value = true;
-            e.Row.Cells[2].Value = DefaultShipCapacity;
-        };
-
-        var ok = new Button { Text = "Save", AutoSize = true, DialogResult = DialogResult.OK };
-        ok.Click += (_, _) => grid.EndEdit();
-        var bar = new FlowLayoutPanel { Dock = DockStyle.Bottom, Height = 44, FlowDirection = FlowDirection.RightToLeft, Padding = new Padding(6) };
-        bar.Controls.Add(ok);
-        f.Controls.Add(grid);
-        f.Controls.Add(label);
-        f.Controls.Add(bar);
-        f.AcceptButton = ok;
-        ApplyTheme(f);
-        if (f.ShowDialog(this) != DialogResult.OK) return;
-
-        var party = new List<string>();
-        var inactive = new List<string>();
-        var capacities = new Dictionary<string, int>(_data.ShipCapacity);
-        foreach (DataGridViewRow row in grid.Rows)
-        {
-            if (row.IsNewRow) continue;
-            var name = (Convert.ToString(row.Cells[0].Value) ?? "").Trim();
-            if (name.Length == 0 || party.Any(x => SameName(x, name))) continue;
-            party.Add(name);
-            if (row.Cells[1].Value is false) inactive.Add(name);
-            capacities[name] = int.TryParse((Convert.ToString(row.Cells[2].Value) ?? "").Trim(), NumberStyles.Integer, CultureInfo.InvariantCulture, out var typed)
-                ? Math.Clamp(typed, 1, MaxShipCapacity)
-                : DefaultShipCapacity;
-        }
-        _data.Party = party;
-        _data.InactiveParty = inactive;
-        _data.ShipCapacity = capacities;
-        Storage.Save(_data);
-
-        _renderedVersion = -1;
-        RefreshFromLog();
     }
 
     // ------------------------------------------------------------------ editing
@@ -1718,7 +1658,7 @@ public sealed partial class MainForm : Form
             var running = !_current.Stop.HasValue && _live && latest && HasOpenContracts();
             return SessionBuilder.ActiveTime(_current, running ? DateTime.UtcNow : null);
         }
-        var active = _live && latest && HasOpenContracts() && (!_summary.End.HasValue || DateTime.UtcNow - _summary.End.Value < TimeSpan.FromMinutes(30));
+        var active = _live && latest && HasOpenContracts() && (!_summary.End.HasValue || DateTime.UtcNow - _summary.End.Value < SessionBuilder.IdleLimit);
         var end = active ? DateTime.UtcNow : _summary.End ?? start;
         var d = end - start;
         return d > TimeSpan.Zero ? d : TimeSpan.Zero;

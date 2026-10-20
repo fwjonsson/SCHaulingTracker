@@ -48,6 +48,14 @@ public sealed class ManualSession
     public DateTime? StopUtc { get; set; }   // null = still running
 }
 
+/// <summary>Someone joined (Active) or left the party at this time. Kept so mission payouts are split between who was there when they paid out.</summary>
+public sealed class PartyChange
+{
+    public string Name { get; set; } = "";
+    public DateTime TimeUtc { get; set; }
+    public bool Active { get; set; }
+}
+
 /// <summary>What you typed yourself for one session.</summary>
 public sealed class SessionInputs
 {
@@ -73,6 +81,7 @@ public sealed class SessionInputs
     public int MissionCount { get; set; }
     public decimal Revenue { get; set; }
     public Dictionary<string, WorkerStat> Stats { get; set; } = new();   // worker -> runs and missions of the session (for the History leaderboard)
+    public Dictionary<string, decimal> Received { get; set; } = new();   // worker -> his share of the mission payouts (split between the party present when each mission paid out)
     public List<string> Members { get; set; } = new();   // the party of the session as used for the split (saved with Carried)   // missions of the session, to avoid counting a session twice
 }
 
@@ -90,6 +99,8 @@ public sealed class AppData
 {
     public string? GameLogPath { get; set; }
     public List<string> Party { get; set; } = new() { "zzoega", "zzatvo", "bildog123" };
+    public List<PartyChange> PartyChanges { get; set; } = new();   // when each member joined or left (Active / inactive)
+    public DateTime? PartyTrackingSince { get; set; }   // payouts of missions that ended before this time are split the old way (the whole session party)
     public List<string> InactiveParty { get; set; } = new();   // party members that are not shown in the party list of the Session tab
     public bool DarkMode { get; set; }   // the dark look
     public string? Channel { get; set; }   // Auto, LIVE, HOTFIX...

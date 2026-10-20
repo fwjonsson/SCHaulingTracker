@@ -43,7 +43,9 @@ public sealed class LocationRow
 
 public static class SessionBuilder
 {
-    static readonly TimeSpan Gap = TimeSpan.FromMinutes(30);
+    /// <summary>Star Citizen is slow: only this long without any activity ends a session (or stops the clock of one you started yourself).</summary>
+    public static readonly TimeSpan IdleLimit = TimeSpan.FromHours(3);
+    static readonly TimeSpan Gap = IdleLimit;
     static readonly Regex StopId = new(@"_\d+$", RegexOptions.Compiled);
 
     static bool IsStop(string objective) => objective.StartsWith("pickup_") && StopId.IsMatch(objective);

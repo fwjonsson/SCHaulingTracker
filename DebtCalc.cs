@@ -21,6 +21,17 @@ public static class DebtCalc
         foreach (var s in sessions)
         {
             if (s.Carried.Count == 0) continue;
+            if (s.Received.Count > 0)
+            {
+                // every payout was split between the party present at that moment: you are owed what you carried and you owe what you received
+                foreach (var k in s.Carried.Keys.Concat(s.Received.Keys).Distinct(StringComparer.OrdinalIgnoreCase))
+                {
+                    var carried = s.Carried.Where(kv => Same(kv.Key, k)).Sum(kv => kv.Value);
+                    var got = s.Received.Where(kv => Same(kv.Key, k)).Sum(kv => kv.Value);
+                    Add(k, carried - got);
+                }
+                continue;
+            }
             var members = new List<string>(s.Members);
             foreach (var k in s.Carried.Keys)
             {
