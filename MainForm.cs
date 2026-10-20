@@ -595,7 +595,9 @@ public sealed partial class MainForm : Form
         _tripGrid.AllowUserToAddRows = false;
         _tripGrid.AllowUserToDeleteRows = false;
         _tripGrid.Columns.Add(Col("Worker", 190, true));   // as wide as Pickup Location above
-        _tripGrid.Columns.Add(Col("Run", 60, true));
+        var runCol = Col("#", 36, true);   // the run number, at the far left like the # of the boards above
+        _tripGrid.Columns.Add(runCol);
+        runCol.DisplayIndex = 0;
         _tripGrid.Columns.Add(Col("Pickup Location & Time", 420, true, DataGridViewContentAlignment.MiddleLeft, true));
         // the columns after Pickups add up to the width of the right panel, so Pickups ends where the boards above end
         _tripGrid.Columns.Add(Col("Batches", 90, true));
@@ -719,7 +721,7 @@ public sealed partial class MainForm : Form
                 var level = LostLevel(t.Key);
                 var idx = _tripGrid.Rows.Add(
                     t.Worker,
-                    "#" + t.Number,
+                    t.Number.ToString(CultureInfo.InvariantCulture),
                     pickups,
                     t.Manual || level == "All" ? "failed" : t.End.HasValue ? t.HandedIn.ToString() : "",
                     RunValueText(t),
