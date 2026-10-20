@@ -202,11 +202,13 @@ public sealed partial class MainForm
         else if (e.ColumnIndex == 3)
         {
             var typed = (Convert.ToString(row.Cells[3].Value) ?? "").Trim();
-            if (typed.Length > 0 && !TryParseSince(typed, out var when))
+            var when = default(DateTime);
+            var ok = typed.Length > 0 && TryParseSince(typed, out when);
+            if (typed.Length > 0 && !ok)
             {
                 SetStatus("Could not read that time. Type it like 12:30 or 19 Oct 22:15.");
             }
-            else if (typed.Length > 0)
+            else if (ok)
             {
                 var last = _data.PartyChanges.Where(c => SameName(c.Name, name)).OrderBy(c => c.TimeUtc).LastOrDefault();
                 if (last != null) last.TimeUtc = when;
