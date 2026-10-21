@@ -74,7 +74,7 @@ public sealed partial class MainForm
         public List<string> Unknown = new();   // drop-offs on this line whose SCU nobody knows ("mission id|objective id"): clicking the Cargo cell lets you type it
         public double Scu;               // SCU picked up here: a guess, the log only knows the SCU of a whole mission, so every stop of it counts as an equal share
         public string ActionText => string.Join(" | ", Actions);
-        public string CargoText => string.Join(" | ", Scu > 0 ? Loads.Append(ScuGuess(Scu)) : Loads);
+        public string CargoText => string.Join(" | ", ShowPickupScu && Scu > 0 ? Loads.Append(ScuGuess(Scu)) : Loads);
     }
 
     /// <summary>What was done at one line of a run in progress (for the text of its Drop/Collect column).</summary>
@@ -450,7 +450,7 @@ public sealed partial class MainForm
         }
         var home = Add(PyroDistances.Ruin, "Ruin", false, trip.Batches > 0 ? new[] { "Drop \u00d7" + trip.Batches } : Array.Empty<string>());
         var handedIn = lines.Sum(l => l.Scu);
-        if (handedIn > 0) home.Loads.Add(ScuGuess(handedIn));   // everything picked up is handed in here
+        if (ShowPickupScu && handedIn > 0) home.Loads.Add(ScuGuess(handedIn));   // everything picked up is handed in here
         return lines;
     }
 
@@ -481,7 +481,7 @@ public sealed partial class MainForm
         var line = new StopLine { Id = PyroDistances.Ruin, Name = "Ruin", Stop = false, Gm = gm, Seconds = gm > 0 ? QtOf(worker).Seconds(gm) : 0 };
         if (batches > 0) line.Actions.Add("Drop \u00d7" + batches);
         var handedIn = lines.Sum(l => l.Scu);
-        if (handedIn > 0) line.Loads.Add(ScuGuess(handedIn));   // everything picked up is handed in here
+        if (ShowPickupScu && handedIn > 0) line.Loads.Add(ScuGuess(handedIn));   // everything picked up is handed in here
         lines.Add(line);
     }
 
@@ -542,7 +542,13 @@ public sealed partial class MainForm
         return total;
     }
 
-    /// <summary>A guessed amount of SCU, like "~392 SCU".</summary>
+    /// <summary>
+    /// Whether the Cargo column also guesses the SCU (as containers, "~5×32 + 2 + 1") of the cargo that is picked up for Ruin. Off: every pickup goes to the same place, so the
+    /// number of batches at a station is all that matters; the code stays for a later version.
+    /// </summary>
+    const bool ShowPickupScu = false;
+
+    /// <summary>A guessed amount of SCU as containers, like "~12×32 + 8".</summary>
     static string ScuGuess(double scu) => Math.Round(scu) < 1 ? "? SCU" : "~" + ContainersText((int)Math.Round(scu));
 
     /// <summary>The latest time the logs show the worker picking up, handing in or delivering a load from Ruin (the minimum time = nothing yet).</summary>
@@ -668,7 +674,7 @@ public sealed partial class MainForm
             "",
             "Total: " + stops + (stops == 1 ? " stop" : " stops"),
             batches > 0 ? "Collect \u00d7" + batches : "",
-            scu > 0 ? ScuGuess(scu) : "",
+            ShowPickupScu && scu > 0 ? ScuGuess(scu) : "",
             ValueText(lines.Sum(l => l.Value)),
             gm > 0 ? Gm(gm) : "",
             flight > 0 ? "~" + FlightSpan(flight) : "",
