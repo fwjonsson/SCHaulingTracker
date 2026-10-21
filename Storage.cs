@@ -138,6 +138,7 @@ public sealed class AppData
     public List<ManualSession> ManualSessions { get; set; } = new();   // started and stopped with the Start Session / Stop Session buttons
     public bool WebView { get; set; }      // the read-only live web view is switched on
     public int WebViewPort { get; set; } = 8765;   // the port of the live web view (on this computer only)
+    public Dictionary<string, string> Ship { get; set; } = new();   // worker -> his ship (Ships name, like "C2 Hercules Starlifter"), for the SCU his ship holds
     public Dictionary<string, string> QuantumDrive { get; set; } = new();   // worker -> the quantum drive in his ship (QuantumDrives key, like "Eos S1"), for the travel time estimates
     public Dictionary<string, int> WorkerColors { get; set; } = new();   // worker -> colour (ARGB) on the Trip Planner Overview, picked in the Party table
     public Dictionary<string, int> ShipCapacity { get; set; } = new();   // worker -> batches his ship holds (the Trip Planner), 0 = not flying

@@ -64,6 +64,15 @@ public sealed partial class MainForm
         if (!active) _data.InactiveParty.Add(name);
     }
 
+    // ------------------------------------------------------------------ ships
+
+    /// <summary>The ship set for this worker, or null.</summary>
+    Ship? ShipOf(string name)
+    {
+        var key = _data.Ship.FirstOrDefault(kv => SameName(kv.Key, name)).Value;
+        return Ships.Find(key);
+    }
+
     // ------------------------------------------------------------------ quantum drives
 
     /// <summary>The quantum drive set for this worker, or null.</summary>
@@ -106,6 +115,10 @@ public sealed partial class MainForm
         _partyGrid.Columns.Add(Col("Member", PartyColMember, true, DataGridViewContentAlignment.MiddleLeft));
         _partyGrid.Columns.Add(new DataGridViewCheckBoxColumn { HeaderText = "Active", Width = PartyColActive, SortMode = DataGridViewColumnSortMode.NotSortable });
         _partyGrid.Columns.Add(Col("Batches", PartyColBatches, false));
+        var shipCol = new DataGridViewComboBoxColumn { HeaderText = "Ship", Width = PartyColShip, SortMode = DataGridViewColumnSortMode.NotSortable, FlatStyle = FlatStyle.Flat, DisplayStyle = DataGridViewComboBoxDisplayStyle.Nothing };
+        shipCol.Items.Add("");
+        foreach (var s in Ships.All) shipCol.Items.Add(s.Label);
+        _partyGrid.Columns.Add(shipCol);
         var driveCol = new DataGridViewComboBoxColumn { HeaderText = "QT Drive", Width = PartyColDrive, SortMode = DataGridViewColumnSortMode.NotSortable, FlatStyle = FlatStyle.Flat, DisplayStyle = DataGridViewComboBoxDisplayStyle.Nothing };
         driveCol.Items.Add("");
         foreach (var d in QuantumDrives.All.OrderBy(x => x.Name, StringComparer.OrdinalIgnoreCase).ThenBy(x => x.Size)) driveCol.Items.Add(d.Label);
@@ -126,7 +139,7 @@ public sealed partial class MainForm
         _partyGrid.CellValueChanged += PartyGrid_CellValueChanged;
         _partyGrid.CellClick += (_, e) =>
         {
-            if (e.RowIndex < 0 || e.ColumnIndex != 4) return;
+            if (e.RowIndex < 0 || e.ColumnIndex != 5) return;
             var name = Convert.ToString(_partyGrid.Rows[e.RowIndex].Cells[0].Value) ?? "";
             if (name.Length == 0) return;
             using var dlg = new ColorDialog { Color = WorkerColor(name), FullOpen = true };
@@ -137,11 +150,11 @@ public sealed partial class MainForm
         };
         _partyGrid.DataError += (_, e) => e.ThrowException = false;
 
-        // The entry row: the name box is a cell under Member / Active, Add sits under Batches and Remove under QT Drive
+        // The entry row: the name box is a cell under Member / Active, Add sits under Batches and Remove under Ship, QT Drive and Color
         var bar = new TableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 3, RowCount = 1, Margin = new Padding(0) };
         bar.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, PartyColMember + PartyColActive));
         bar.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, PartyColBatches));
-        bar.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, PartyColDrive + PartyColColor));
+        bar.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, PartyColShip + PartyColDrive + PartyColColor));
         bar.RowStyles.Add(new RowStyle(SizeType.Absolute, PartyRowHeight));
         _partyName.BorderStyle = BorderStyle.None;
         _partyName.Dock = DockStyle.Fill;
@@ -185,7 +198,7 @@ public sealed partial class MainForm
     const int PartyRowHeight = 26;
     const int PartyMaxRows = 6;
     // proportions of the columns (the entry row under the table uses the same ones)
-    const int PartyColMember = 90, PartyColActive = 62, PartyColBatches = 78, PartyColDrive = 116, PartyColColor = 64;
+    const int PartyColMember = 90, PartyColActive = 62, PartyColBatches = 78, PartyColShip = 150, PartyColDrive = 116, PartyColColor = 64;
     TableLayoutPanel? _partyPanel;
     int _partyHeight = PartyMaxHeight;   // as drawn now, the party table and its entry row
 
@@ -214,9 +227,9 @@ public sealed partial class MainForm
             foreach (var name in _data.Party)
             {
                 var active = IsActiveAt(name, DateTime.UtcNow);
-                var idx = _partyGrid.Rows.Add(name, active, Math.Max(1, ShipCapacityOf(name)), DriveOf(name)?.Label ?? "", "");
+                var idx = _partyGrid.Rows.Add(name, active, Math.Max(1, ShipCapacityOf(name)), ShipOf(name)?.Label ?? "", DriveOf(name)?.Label ?? "", "");
                 if (!active) _partyGrid.Rows[idx].DefaultCellStyle.ForeColor = Theme.Muted;
-                var swatch = _partyGrid.Rows[idx].Cells[4].Style;
+                var swatch = _partyGrid.Rows[idx].Cells[5].Style;
                 swatch.BackColor = swatch.SelectionBackColor = WorkerColor(name);
             }
             if (selected != null)
@@ -271,7 +284,13 @@ public sealed partial class MainForm
         }
         else if (e.ColumnIndex == 3)
         {
-            var picked = QuantumDrives.Find(Convert.ToString(row.Cells[3].Value));
+            var ship = Ships.Find(Convert.ToString(row.Cells[3].Value));
+            foreach (var k in _data.Ship.Keys.Where(k => SameName(k, name)).ToList()) _data.Ship.Remove(k);
+            if (ship != null) _data.Ship[name] = ship.Name;
+        }
+        else if (e.ColumnIndex == 4)
+        {
+            var picked = QuantumDrives.Find(Convert.ToString(row.Cells[4].Value));
             foreach (var k in _data.QuantumDrive.Keys.Where(k => SameName(k, name)).ToList()) _data.QuantumDrive.Remove(k);
             if (picked != null) _data.QuantumDrive[name] = picked.Key;
         }
